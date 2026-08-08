@@ -23,7 +23,7 @@ class ResNet18PatchExtractor(nn.Module):
             parameter.requires_grad_(False)
         self.eval()
 
-    def train(self, mode: bool = True) -> "ResNet18PatchExtractor":
+    def train(self, mode: bool = True) -> ResNet18PatchExtractor:
         super().train(False)
         return self
 

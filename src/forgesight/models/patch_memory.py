@@ -161,7 +161,7 @@ class PatchMemory(nn.Module):
         torch.save(payload, path)
 
     @classmethod
-    def load(cls, path: str | Path, *, device: torch.device | str = "cpu") -> "PatchMemory":
+    def load(cls, path: str | Path, *, device: torch.device | str = "cpu") -> PatchMemory:
         payload = torch.load(path, map_location=device, weights_only=True)
         if payload.get("extractor") != "resnet18_multiscale":
             raise ValueError("unsupported checkpoint extractor")
