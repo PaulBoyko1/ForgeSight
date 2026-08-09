@@ -261,10 +261,9 @@ class PatchMemory(nn.Module):
 
 
 def _finite_threshold(value: object) -> float:
-    try:
-        threshold = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("checkpoint threshold must be finite") from exc
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("checkpoint threshold must be a finite number")
+    threshold = float(value)
     if not math.isfinite(threshold):
         raise ValueError("checkpoint threshold must be finite")
     return threshold
