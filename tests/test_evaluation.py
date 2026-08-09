@@ -17,6 +17,21 @@ def test_pixel_auroc() -> None:
     assert result == pytest.approx(1.0)
 
 
+@pytest.mark.parametrize(
+    ("labels", "scores"),
+    [
+        (np.array([0, 2]), np.array([0.1, 0.9])),
+        (np.array([0, 1]), np.array([0.1, np.nan])),
+        (np.array([0.5, 1.0]), np.array([0.1, 0.9])),
+    ],
+)
+def test_metrics_reject_malformed_inputs(labels: np.ndarray, scores: np.ndarray) -> None:
+    with pytest.raises(ValueError):
+        binary_anomaly_metrics(labels, scores)
+    with pytest.raises(ValueError):
+        pixel_auroc(labels, scores)
+
+
 def test_domain_report_tracks_degradation() -> None:
     frame = pd.DataFrame(
         {
