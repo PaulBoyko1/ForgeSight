@@ -11,7 +11,7 @@ from forgesight.models.patch_memory import Prediction
 class StubModel:
     threshold = 0.5
 
-    def eval(self) -> StubModel:
+    def eval(self) -> "StubModel":
         return self
 
     def predict(self, images: torch.Tensor) -> Prediction:
