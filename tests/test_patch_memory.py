@@ -1,3 +1,4 @@
+import pytest
 import torch
 from torch import nn
 
@@ -17,6 +18,13 @@ def test_coreset_is_deterministic_and_reduces_features() -> None:
     assert torch.equal(a, b)
 
 
+def test_coreset_rejects_nonfinite_features_and_invalid_limits() -> None:
+    with pytest.raises(ValueError, match="finite"):
+        farthest_first_coreset(torch.tensor([[float("nan")]]), ratio=0.5)
+    with pytest.raises(ValueError, match="max_candidates"):
+        farthest_first_coreset(torch.ones(2, 1), ratio=0.5, max_candidates=0)
+
+
 def test_patch_memory_fit_predict_and_threshold(tmp_path) -> None:
     model = PatchMemory(ToyExtractor(), coreset_ratio=0.5)
     normal = torch.zeros(2, 3, 8, 8)
@@ -27,6 +35,16 @@ def test_patch_memory_fit_predict_and_threshold(tmp_path) -> None:
     assert prediction.image_scores.item() > 0
     threshold = model.calibrate_threshold(torch.tensor([0.1, 0.2, 0.3]), quantile=0.9)
     assert 0.2 < threshold <= 0.3
+
+
+def test_patch_memory_rejects_empty_or_nonfinite_images() -> None:
+    model = PatchMemory(ToyExtractor(), coreset_ratio=1.0)
+    model.fit_embeddings(torch.zeros(1, 3, 8, 8))
+
+    with pytest.raises(ValueError, match="non-empty"):
+        model.predict(torch.empty(0, 3, 8, 8))
+    with pytest.raises(ValueError, match="finite"):
+        model.predict(torch.full((1, 3, 8, 8), float("nan")))
 
 
 def test_resnet_extractor_checkpoint_roundtrip(tmp_path) -> None:
@@ -42,6 +60,25 @@ def test_resnet_extractor_checkpoint_roundtrip(tmp_path) -> None:
     restored = PatchMemory.load(path)
     prediction = restored.predict(normal)
     assert prediction.anomaly_maps.shape == (1, 1, 32, 32)
+
+
+def test_checkpoint_rejects_nonfinite_memory_bank(tmp_path) -> None:
+    path = tmp_path / "invalid.pt"
+    torch.save(
+        {
+            "version": 1,
+            "extractor": "resnet18_multiscale",
+            "extractor_state": {},
+            "memory_bank": torch.tensor([[float("nan")]]),
+            "threshold": None,
+            "coreset_ratio": 0.1,
+            "distance_chunk_size": 4,
+        },
+        path,
+    )
+
+    with pytest.raises(ValueError, match="finite"):
+        PatchMemory.load(path)
 
 
 def test_benchmark_reports_system_metrics() -> None:
