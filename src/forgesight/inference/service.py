@@ -1,7 +1,5 @@
 """FastAPI deployment surface for a fitted ForgeSight checkpoint."""
 
-from __future__ import annotations
-
 import io
 import os
 from pathlib import Path
