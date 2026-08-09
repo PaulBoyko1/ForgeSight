@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from forgesight.data.mvtec import ManifestDataset, discover_category
@@ -31,3 +32,11 @@ def test_discover_category_and_dataset(tmp_path: Path) -> None:
     assert label == 1
     assert mask.sum() == 32 * 32
     assert domain == "default"
+
+
+def test_discover_rejects_anomalous_training_images(tmp_path: Path) -> None:
+    root = tmp_path / "can"
+    _image(root / "train" / "dent" / "000.png")
+
+    with pytest.raises(ValueError, match="normal images only"):
+        discover_category(root)
