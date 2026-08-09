@@ -30,8 +30,8 @@ class SampleRecord:
 def discover_category(category_root: str | Path) -> pd.DataFrame:
     """Discover a MVTec-style category into an explicit manifest.
 
-    The scanner supports classic ``train/test/ground_truth`` layouts and AD 2's
-    ``train/validation/test_public`` split names. Unknown private splits are not
+    The scanner supports classic train/test/ground_truth layouts and AD 2's
+    train/validation/test_public split names. Unknown private splits are not
     assigned labels and are therefore intentionally omitted from this local-eval manifest.
     """
     root = Path(category_root)
@@ -43,15 +43,19 @@ def discover_category(category_root: str | Path) -> pd.DataFrame:
         split_root = root / split
         if not split_root.is_dir():
             continue
-        for image_path in sorted(p for p in split_root.rglob("*") if _is_image(p)):
-            rel = image_path.relative_to(split_root)
-            defect_type = rel.parts[0] if len(rel.parts) > 1 else "good"
+        for image_path in sorted(path for path in split_root.rglob("*") if _is_image(path)):
+            relative_path = image_path.relative_to(split_root)
+            defect_type = relative_path.parts[0] if len(relative_path.parts) > 1 else "good"
+            if split in {"train", "validation"} and defect_type.lower() not in NORMAL_TOKENS:
+                raise ValueError(
+                    f"{split} split must contain normal images only; found {defect_type!r}"
+                )
             label = (
                 0
                 if split in {"train", "validation"}
                 else int(defect_type.lower() not in NORMAL_TOKENS)
             )
-            domain = _infer_domain(rel, defect_type)
+            domain = _infer_domain(relative_path, defect_type)
             mask = _find_mask(root, split, image_path, defect_type) if label == 1 else None
             records.append(
                 SampleRecord(
@@ -109,6 +113,10 @@ class ManifestDataset(Dataset[tuple[torch.Tensor, int, torch.Tensor, str]]):
         if image_size < 32:
             raise ValueError("image_size must be >= 32")
         self.manifest = manifest.reset_index(drop=True).copy()
+        labels = pd.to_numeric(self.manifest["label"], errors="raise")
+        if labels.isna().any() or not labels.isin([0, 1]).all():
+            raise ValueError("manifest labels must be binary")
+        self.manifest["label"] = labels.astype(int)
         self.image_size = image_size
         self.transform = v2.Compose(
             [
@@ -124,13 +132,16 @@ class ManifestDataset(Dataset[tuple[torch.Tensor, int, torch.Tensor, str]]):
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, int, torch.Tensor, str]:
         row = self.manifest.iloc[index]
-        image = Image.open(row["image_path"]).convert("RGB")
+        with Image.open(row["image_path"]) as source:
+            image = source.convert("RGB")
         tensor = self.transform(image)
         mask = torch.zeros((1, self.image_size, self.image_size), dtype=torch.float32)
         mask_path = row["mask_path"]
         if isinstance(mask_path, str) and mask_path:
-            mask_image = Image.open(mask_path).convert("L").resize(
-                (self.image_size, self.image_size), resample=Image.Resampling.NEAREST
-            )
+            with Image.open(mask_path) as source:
+                mask_image = source.convert("L").resize(
+                    (self.image_size, self.image_size),
+                    resample=Image.Resampling.NEAREST,
+                )
             mask = torch.from_numpy((np.asarray(mask_image) > 0).astype(np.float32))[None, ...]
         return tensor, int(row["label"]), mask, str(row["domain"])
